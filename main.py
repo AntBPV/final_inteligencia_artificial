@@ -5,6 +5,7 @@ from pathlib import Path
 
 import cv2
 
+from device_support import print_device_status, resolve_device
 from detection.person_detector import PersonDetector
 from counting.line_counter import LineCounter
 from analytics.assistant import OccupancyAssistant
@@ -38,8 +39,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--device",
-        default="cpu",
-        help="Dispositivo de inferencia: cpu o cuda.",
+        default="auto",
+        help="Dispositivo: auto, cpu, cuda, dml u openvino.",
+    )
+    parser.add_argument(
+        "--device-status",
+        action="store_true",
+        help="Muestra los dispositivos disponibles y finaliza.",
     )
     parser.add_argument(
         "--track",
@@ -83,6 +89,12 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=8.0,
         help="Margen en pixeles alrededor de la linea.",
+    )
+    parser.add_argument(
+        "--imgsz",
+        type=int,
+        default=640,
+        help="Resolucion de inferencia: 320, 416, 512 o 640.",
     )
     parser.add_argument(
         "--output",
@@ -220,6 +232,16 @@ def process_video(
 def main() -> int:
     args = parse_args()
 
+    if args.device_status:
+        print_device_status()
+        return 0
+
+    try:
+        resolved_device = resolve_device(args.device)
+    except (RuntimeError, ValueError) as error:
+        print(f"No se pudo configurar el dispositivo: {error}", file=sys.stderr)
+        return 8
+
     repository = CountRepository(args.database)
     statistics = OccupancyStatistics(repository.connection)
     assistant = OccupancyAssistant(statistics)
@@ -268,7 +290,7 @@ def main() -> int:
         detector = PersonDetector(
             model_name=args.model,
             confidence=args.conf,
-            device=args.device,
+            device=resolved_device,
         )
     except (ImportError, ValueError, RuntimeError) as error:
         print(f"No se pudo cargar el detector: {error}", file=sys.stderr)
@@ -284,9 +306,10 @@ def main() -> int:
             active_tracker = PersonTracker(
                 model_name=args.model,
                 confidence=args.conf,
-                device=args.device,
+                device=resolved_device,
                 tracker=args.tracker,
                 trajectory_length=args.trajectory,
+                imgsz=args.imgsz,
             )
         except (ImportError, ValueError, RuntimeError) as error:
             print(f"No se pudo iniciar el seguimiento: {error}", file=sys.stderr)

@@ -455,6 +455,115 @@ La tabla `count_events` conserva fecha ISO, identificador temporal del track,
 tipo de evento y ocupacion resultante. La base SQLite y el directorio `data/`
 se excluyen del control de versiones.
 
+## Ejecutar la fase 5: panel interactivo
+
+Iniciar Streamlit desde la raiz del proyecto:
+
+```powershell
+.\.env\Scripts\Activate.ps1
+python -m streamlit run app.py
+```
+
+El navegador muestra:
+
+- video procesado con IDs, trayectorias y línea;
+- ocupación actual;
+- entradas y salidas de la sesión;
+- FPS aproximado;
+- últimos eventos;
+- tabla persistida en SQLite;
+- estadísticas del día;
+- asistente local para consultas simples.
+
+La demostración puede usar un archivo MP4 o la cámara web. Antes de ejecutar
+una cámara real se debe contar con autorización y avisar a las personas presentes.
+
+Opciones visuales de prueba:
+
+1. seleccionar `people-walking.mp4` o `people-seoul.mp4`;
+2. mantener el umbral entre `0.35` y `0.40`;
+3. comenzar con resolución `416` y confirmar que la precisión sigue siendo suficiente;
+4. ajustar la línea cerca de la zona real de entrada/salida;
+5. comenzar con confirmación de `3` fotogramas;
+6. iniciar la demostración y observar ocupación y eventos;
+7. detenerla al finalizar para cerrar correctamente la fuente.
+
+## Ejecutar la fase 6: pruebas y entrega
+
+Ejecutar todas las pruebas:
+
+```powershell
+python -m pytest -q
+```
+
+Medir el rendimiento sobre un video conocido:
+
+```powershell
+python benchmark.py resources/people-walking.mp4 --frames 300 --imgsz 640 --device cpu
+```
+
+Comparar resoluciones sin cambiar el código:
+
+```powershell
+python benchmark.py resources/people-walking.mp4 --frames 300 --imgsz 512 --device cpu
+python benchmark.py resources/people-walking.mp4 --frames 300 --imgsz 416 --device cpu
+python benchmark.py resources/people-walking.mp4 --frames 300 --imgsz 320 --device cpu
+```
+
+Consultar dispositivos reconocidos:
+
+```powershell
+python main.py --device-status
+```
+
+### Rendimiento y aceleracion AMD
+
+El entorno actual usa `torch 2.15.0+cpu` y confirma que CUDA no está disponible.
+Por lo tanto, el bajo FPS observado con el modelo y el seguimiento activos se debe
+principalmente a ejecución mediante CPU, además del trabajo adicional de Streamlit,
+dibujo de trayectorias y actualizaciones de SQLite.
+
+La GPU AMD no puede acelerarse mediante CUDA, porque CUDA pertenece al ecosistema
+NVIDIA. Tampoco conviene instalar paquetes CUDA o cambiar versiones en la fase final
+si todavía no están probados.
+
+Opciones compatibles a evaluar con AMD:
+
+- **OpenVINO:** alternativa principal para muchos equipos Intel/AMD. Puede acelerar
+  inferencia por CPU, GPU integrada o aceleradores compatibles.
+- **DirectML:** alternativa para AMD mediante Windows. Requiere una instalación
+  separada de `torch-directml` y normalmente Python 3.11 o 3.12.
+- **ROCm:** opción Linux principalmente; el soporte directo en Windows puede ser
+  limitado según modelo y distribución.
+
+Para no romper el entorno actual se recomienda ignorar DirectML temporalmente.
+El entorno ya contiene opciones `dml` y `openvino`, pero muestran una validación
+clara si los paquetes o la GPU no están disponibles.
+
+Instalación opcional de OpenVINO:
+
+```powershell
+python -m pip install openvino
+```
+
+La aceleración AMD debe medirse con benchmark antes de declararla estable. Si
+OpenVINO no mejora la velocidad, se mantiene CPU como modo reproducible.
+
+### Conceptos de fase 6
+
+- Benchmark y baseline.
+- FPS, throughput y latencia.
+- Latencia media y percentil p95.
+- Resolución de inferencia y trade-off precisión-rendimiento.
+- CPU-bound y GPU-bound.
+- Pipeline bottleneck.
+- Warm-up y caché JIT.
+- Batch size y inferencia por fotograma.
+- Frame skipping y procesamiento asincrónico.
+- Profiling de CPU y GPU.
+- Reproducibilidad de pruebas.
+- Evidencia académica con video conocido.
+
 La primera ejecucion descarga `yolo11n.pt` automaticamente. El archivo de pesos
 se excluye del control de versiones por `.gitignore`.
 

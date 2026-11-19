@@ -31,6 +31,7 @@ class PersonTracker:
         tracker: str = "tracking/bytetrack_stable.yaml",
         trajectory_length: int = 30,
         lost_grace_frames: int = 15,
+        imgsz: int = 640,
     ) -> None:
         if not 0.0 <= confidence <= 1.0:
             raise ValueError("confidence debe estar entre 0 y 1")
@@ -38,6 +39,8 @@ class PersonTracker:
             raise ValueError("trajectory_length debe ser mayor que cero")
         if lost_grace_frames < 0:
             raise ValueError("lost_grace_frames no puede ser negativo")
+        if imgsz < 160:
+            raise ValueError("imgsz debe ser al menos 160")
 
         from ultralytics import YOLO
 
@@ -45,6 +48,7 @@ class PersonTracker:
         self.device = device
         self.tracker = tracker
         self.trajectory_length = trajectory_length
+        self.imgsz = imgsz
         self.model = YOLO(model_name)
         self.trajectories: dict[int, deque[tuple[int, int]]] = defaultdict(
             lambda: deque(maxlen=self.trajectory_length)
@@ -79,7 +83,7 @@ class PersonTracker:
             device=self.device,
             tracker=self.tracker,
             persist=True,
-            imgsz=640,
+            imgsz=self.imgsz,
             verbose=False,
         )
 
