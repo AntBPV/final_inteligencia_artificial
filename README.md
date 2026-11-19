@@ -357,6 +357,45 @@ Configuracion conservadora aplicada:
 No se recomienda usar `--conf` menor a `0.30` en escenas públicas. Un umbral
 demasiado bajo introduce detecciones parciales y frecuentemente genera IDs falsos.
 
+## Ejecutar la fase 3: conteo
+
+El conteo se activa junto con el seguimiento:
+
+```powershell
+python main.py --source data/videos/prueba.mp4 --track --count
+```
+
+La línea predeterminada atraviesa horizontalmente el fotograma al 50 % de altura.
+Puede configurarse mediante coordenadas normalizadas:
+
+```powershell
+python main.py --track --count --line-x1 0.20 --line-y1 0.50 --line-x2 0.80 --line-y2 0.50
+```
+
+Opciones adicionales:
+
+```text
+--count               Activa el contador
+--line-x1 0.0         Coordenada X del primer punto
+--line-y1 0.5         Coordenada Y del primer punto
+--line-x2 1.0         Coordenada X del segundo punto
+--line-y2 0.5         Coordenada Y del segundo punto
+--confirmation 3      Fotogramas necesarios para confirmar el cruce
+--line-margin 8       Distancia minima alrededor de la linea
+--reverse-direction   Intercambia entrada y salida
+```
+
+### Conceptos de la fase 3
+
+- Punto de observación: parte del cuadro utilizada para representar el movimiento.
+- Signed distance: distancia con signo respecto de una recta.
+- Cruce de línea: cambio de lado para una persona rastreada.
+- Hysteresis: zona o confirmacion temporal que evita alternancias rápidas.
+- State machine: estado almacenado por cada track ID.
+- Double counting: registro repetido del mismo cruce.
+- Ocupación: entradas menos salidas, limitada para no ser negativa.
+- Coordenadas normalizadas: posiciones relativas al ancho y alto del fotograma.
+
 La primera ejecucion descarga `yolo11n.pt` automaticamente. El archivo de pesos
 se excluye del control de versiones por `.gitignore`.
 

@@ -5,9 +5,11 @@ from pathlib import Path
 import cv2
 
 from detection.person_detector import PersonDetector
+from counting.line_counter import LineCounter
 from tracking.person_tracker import PersonTracker
 from visualization.renderer import draw_person_detections
 from visualization.tracking_renderer import draw_tracks
+from visualization.counting_renderer import draw_counting_overlay
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,6 +53,32 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=30,
         help="Cantidad maxima de puntos mostrados por trayectoria.",
+    )
+    parser.add_argument(
+        "--count",
+        action="store_true",
+        help="Activar conteo de entradas y salidas al cruzar una linea.",
+    )
+    parser.add_argument("--line-x1", type=float, default=0.0)
+    parser.add_argument("--line-y1", type=float, default=0.50)
+    parser.add_argument("--line-x2", type=float, default=1.0)
+    parser.add_argument("--line-y2", type=float, default=0.50)
+    parser.add_argument(
+        "--reverse-direction",
+        action="store_true",
+        help="Invierte que lado representa entrada y salida.",
+    )
+    parser.add_argument(
+        "--confirmation",
+        type=int,
+        default=3,
+        help="Fotogramas consecutivos necesarios para confirmar un cruce.",
+    )
+    parser.add_argument(
+        "--line-margin",
+        type=float,
+        default=8.0,
+        help="Margen en pixeles alrededor de la linea.",
     )
     parser.add_argument(
         "--output",
@@ -101,6 +129,11 @@ def process_video(
     detector: PersonDetector,
     source: str | int,
     tracker: PersonTracker | None = None,
+    count: bool = False,
+    line_points: tuple[float, float, float, float] = (0.0, 0.50, 1.0, 0.50),
+    reverse_direction: bool = False,
+    confirmation_frames: int = 3,
+    line_margin_pixels: float = 8.0,
 ) -> bool:
     capture = cv2.VideoCapture(source)
     if not capture.isOpened():
@@ -108,6 +141,8 @@ def process_video(
         return False
 
     window_name = "Deteccion de personas"
+    counter: LineCounter | None = None
+    recent_events: list[str] = []
 
     try:
         while True:
@@ -115,12 +150,38 @@ def process_video(
             if not success:
                 break
 
+            tracks = []
             if tracker is None:
                 detections = detector.detect(frame)
                 rendered = draw_person_detections(frame, detections)
             else:
                 tracks = tracker.update(frame)
                 rendered = draw_tracks(frame, tracks, tracker)
+
+            if count:
+                if counter is None:
+                    height, width = frame.shape[:2]
+                    counter = LineCounter(
+                        frame_width=width,
+                        frame_height=height,
+                        line_start=(line_points[0], line_points[1]),
+                        line_end=(line_points[2], line_points[3]),
+                        confirmation_frames=confirmation_frames,
+                        line_margin_pixels=line_margin_pixels,
+                        reverse_direction=reverse_direction,
+                    )
+
+                events = counter.update(tracks)
+                for event in events:
+                    label = f"{event.event_type.upper()} ID {event.track_id}"
+                    recent_events.append(label)
+                    print(label)
+
+                rendered = draw_counting_overlay(
+                    rendered,
+                    counter,
+                    recent_events[-3:],
+                )
             cv2.imshow(window_name, rendered)
 
             key = cv2.waitKey(1) & 0xFF
@@ -170,7 +231,26 @@ def main() -> int:
             print(f"No se pudo iniciar el seguimiento: {error}", file=sys.stderr)
             return 6
 
-    return 0 if process_video(detector, source, active_tracker) else 5
+    if args.count and not args.track:
+        print("El conteo requiere activar --track.", file=sys.stderr)
+        return 7
+
+    line_points = (
+        args.line_x1,
+        args.line_y1,
+        args.line_x2,
+        args.line_y2,
+    )
+    return 0 if process_video(
+        detector,
+        source,
+        active_tracker,
+        args.count,
+        line_points,
+        args.reverse_direction,
+        args.confirmation,
+        args.line_margin,
+    ) else 5
 
 
 if __name__ == "__main__":
