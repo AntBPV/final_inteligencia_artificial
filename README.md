@@ -4,7 +4,8 @@ Proyecto academico de inteligencia artificial para detectar personas en video o
 camara web, seguirlas a lo largo de los fotogramas y contar entradas y salidas.
 
 Este repositorio esta preparado para desarrollar el proyecto por fases. La fase 1
-corresponde a la deteccion base de personas mediante una CNN.
+corresponde a la deteccion base de personas mediante una CNN y la fase 2 integra
+seguimiento temporal.
 
 ## Estado actual
 
@@ -12,7 +13,8 @@ corresponde a la deteccion base de personas mediante una CNN.
 - Estructura inicial creada para deteccion, seguimiento, conteo, almacenamiento,
   analisis y visualizacion.
 - Dependencias principales instaladas.
-- Pendiente la implementacion del modulo de deteccion y su demostracion.
+- Deteccion funcional mediante YOLO.
+- Seguimiento integrado mediante ByteTrack o BoT-SORT.
 
 ## Tecnologias seleccionadas
 
@@ -142,7 +144,100 @@ Un detector no garantiza exactitud perfecta. Puede fallar ante:
 - fondos visualmente complejos;
 - cambios de resolucion o angulo.
 
-El seguimiento, aun no implementado, se verá afectado por estas limitaciones.
+El seguimiento puede verse afectado por estas limitaciones, especialmente por
+oclusiones, cambios de identidad y trayectorias fragmentadas.
+
+## Conceptos técnicos para estudiar
+
+Estos nombres forman el vocabulario necesario para explicar y evaluar el sistema.
+Las explicaciones se mantienen breves; cada concepto puede estudiarse de forma
+individual en documentación académica o técnica.
+
+### Fase 1: detección
+
+- Tensor, tensor multidimensional y batch.
+- Convolución, kernel, stride, padding y receptive field.
+- Feature maps y extracción jerárquica de características.
+- Mecanismos de activación: ReLU y funciones de activación.
+- Pooling y preservacion espacial.
+- Backpropagation y descenso de gradiente.
+- Transfer learning y fine-tuning.
+- Arquitectura CNN y capa backbone.
+- Neck o capas de fusion multiescala.
+- Detection head o cabeza de detección.
+- Anchor-free detection.
+- IoU, Intersection over Union.
+- NMS y threshold de confianza.
+- Class y objectness score.
+- One-stage detector y YOLO.
+- COCO dataset y taxonomía de clases.
+- Entrenamiento, validación, inferencia y generalización.
+- Overfitting y underfitting.
+- Precision, recall, F1-score y mean Average Precision.
+- Matriz de confusión y curvas Precision-Recall.
+- Resolución de entrada, batch size y latencia.
+
+### Fase 2: seguimiento
+
+- Multi-object tracking o MOT.
+- Object tracking y data association.
+- Track ID y identidad temporal.
+- Detection-to-track association.
+- Bounding box, estado cinemático y punto de observación.
+- IoU matching.
+- Re-identification o Re-ID.
+- Motion model y Kalman filter.
+- Predicción y actualización de estado.
+- Filter gain, incertidumbre y matriz de covarianza.
+- Hungarian algorithm.
+- Greedy matching.
+- Cost matrix o matriz de costes.
+- Similarity score y apareamiento global.
+- Track lifecycle: nuevo, activo, perdido y eliminado.
+- Track confirmation y unconfirmed track.
+- Tracklet.
+- Occlusion handling.
+- Identity switch.
+- Fragmentation de trayectoria.
+- ByteTrack y sus detecciones de baja y alta confianza.
+- BoT-SORT y asociación basada en movimiento y apariencia.
+- State estimation con filtro de Kalman.
+- Persistent tracking.
+- Batch temporal y consistencia entre fotogramas.
+- FPS, frame-to-frame latency y throughput.
+- HOTA, MOTA, IDF1 y CLEAR MOT.
+- Multi-object tracking accuracy y fragmentos de identidad.
+
+### Conceptos adicionales según el avance
+
+- Geometría de líneas y coordenadas normalizadas.
+- Interpolación y detección de cruces.
+- State machine o máquina de estados.
+- Persistencia con SQLite y consultas SQL.
+- Series temporales y agregaciones.
+- Rule-based system y procesamiento de lenguaje natural básico.
+- API, interfaz CLI y arquitectura por módulos.
+- Pruebas unitarias, integración y evaluación funcional.
+- Reproducibilidad y fijado de versiones.
+- Privacidad desde el diseño y minimización de datos.
+
+### Conceptos de persistencia y estadisticas
+
+- SQLite y base de datos relacional.
+- Esquema, tabla, fila, columna y clave primaria.
+- Constraints o restricciones de integridad.
+- Índices y consultas con filtros temporales.
+- Transacción, commit y rollback.
+- SQL DML y SQL de agregación.
+- COUNT, MAX, GROUP BY y ORDER BY.
+- Series temporales e ISO 8601.
+- Zona horaria y diferencia UTC/local.
+- Sesión o batch ID.
+- Persistencia de eventos frente a persistencia de estados.
+- Exportación CSV.
+- Consultas locales sin servicios externos.
+- Asistente basado en reglas y NLP limitado.
+- Tokenización, coincidencia por palabras clave e intención.
 
 ## Arquitectura actual
 
@@ -240,10 +335,234 @@ Opciones disponibles:
 
 ```text
 --model yolo11n.pt   Modelo YOLO preentrenado
---conf 0.40          Umbral de confianza
+--conf 0.35          Umbral de confianza
 --device cpu         Dispositivo de inferencia
 --source 0           Indice explicito de la webcam
+--track              Activa el seguimiento integrado
+--tracker            tracking/bytetrack_stable.yaml o tracking/botsort_stable.yaml
+--trajectory 30      Numero maximo de puntos por trayectoria
 ```
+
+## Ejecutar la fase 2: seguimiento
+
+Con ByteTrack:
+
+```powershell
+python main.py --source data/videos/prueba.mp4 --track --tracker tracking/bytetrack_stable.yaml
+```
+
+Con BoT-SORT:
+
+```powershell
+python main.py --track --tracker tracking/botsort_stable.yaml
+```
+
+La segunda opcion utiliza la webcam. Cada persona mostrada conserva un `ID` temporal
+entre fotogramas y tambien se dibuja su trayectoria reciente. El identificador no
+representa una identidad personal y puede reiniciarse al cambiar de video, camara
+o reiniciar el programa.
+
+Configuracion conservadora aplicada:
+
+- umbral predeterminado elevado a `0.35`;
+- las pistas deben confirmar una detección antes de recibir nuevo ID;
+- asociaciones conservan hasta `90` fotogramas;
+- se eliminan cuadros con solapamiento IoU mayor a `0.50`;
+- el código ya no reasigna IDs mediante heurísticas propias;
+- el número mostrado corresponde al ID entregado por ByteTrack o BoT-SORT;
+- si una persona desaparece, desaparece el cuadro hasta que reaparezca.
+
+No se recomienda usar `--conf` menor a `0.30` en escenas públicas. Un umbral
+demasiado bajo introduce detecciones parciales y frecuentemente genera IDs falsos.
+
+## Ejecutar la fase 3: conteo
+
+El conteo se activa junto con el seguimiento:
+
+```powershell
+python main.py --source data/videos/prueba.mp4 --track --count
+```
+
+La línea predeterminada atraviesa horizontalmente el fotograma al 50 % de altura.
+Puede configurarse mediante coordenadas normalizadas:
+
+```powershell
+python main.py --track --count --line-x1 0.20 --line-y1 0.50 --line-x2 0.80 --line-y2 0.50
+```
+
+Opciones adicionales:
+
+```text
+--count               Activa el contador
+--line-x1 0.0         Coordenada X del primer punto
+--line-y1 0.5         Coordenada Y del primer punto
+--line-x2 1.0         Coordenada X del segundo punto
+--line-y2 0.5         Coordenada Y del segundo punto
+--confirmation 3      Fotogramas necesarios para confirmar el cruce
+--line-margin 8       Distancia minima alrededor de la linea
+--reverse-direction   Intercambia entrada y salida
+```
+
+### Conceptos de la fase 3
+
+- Punto de observación: parte del cuadro utilizada para representar el movimiento.
+- Signed distance: distancia con signo respecto de una recta.
+- Cruce de línea: cambio de lado para una persona rastreada.
+- Hysteresis: zona o confirmacion temporal que evita alternancias rápidas.
+- State machine: estado almacenado por cada track ID.
+- Double counting: registro repetido del mismo cruce.
+- Ocupación: entradas menos salidas, limitada para no ser negativa.
+- Coordenadas normalizadas: posiciones relativas al ancho y alto del fotograma.
+
+## Ejecutar la fase 4: persistencia y estadísticas
+
+Cada cruce puede guardarse automáticamente en SQLite. Por defecto la base se
+crea en `data/occupancy.sqlite3`:
+
+```powershell
+python main.py --source data/videos/prueba.mp4 --track --count --database data/occupancy.sqlite3
+```
+
+Consultar el resumen del dia:
+
+```powershell
+python main.py --stats
+```
+
+Consultar una estadistica con el asistente local:
+
+```powershell
+python main.py --ask "cuantas personas hay ahora"
+python main.py --ask "cuantas entradas hubo hoy"
+python main.py --ask "cuantas salidas hubo hoy"
+python main.py --ask "cual fue la ocupacion maxima"
+python main.py --ask "muestra el total de la ultima hora"
+```
+
+Abrir el asistente interactivo:
+
+```powershell
+python main.py --interactive
+```
+
+Exportar todos los eventos a CSV:
+
+```powershell
+python main.py --export data/resultados/eventos.csv
+```
+
+La tabla `count_events` conserva fecha ISO, identificador temporal del track,
+tipo de evento y ocupacion resultante. La base SQLite y el directorio `data/`
+se excluyen del control de versiones.
+
+## Ejecutar la fase 5: panel interactivo
+
+Iniciar Streamlit desde la raiz del proyecto:
+
+```powershell
+.\.env\Scripts\Activate.ps1
+python -m streamlit run app.py
+```
+
+El navegador muestra:
+
+- video procesado con IDs, trayectorias y línea;
+- ocupación actual;
+- entradas y salidas de la sesión;
+- FPS aproximado;
+- últimos eventos;
+- tabla persistida en SQLite;
+- estadísticas del día;
+- asistente local para consultas simples.
+
+La demostración puede usar un archivo MP4 o la cámara web. Antes de ejecutar
+una cámara real se debe contar con autorización y avisar a las personas presentes.
+
+Opciones visuales de prueba:
+
+1. seleccionar `people-walking.mp4` o `people-seoul.mp4`;
+2. mantener el umbral entre `0.35` y `0.40`;
+3. comenzar con resolución `416` y confirmar que la precisión sigue siendo suficiente;
+4. ajustar la línea cerca de la zona real de entrada/salida;
+5. comenzar con confirmación de `3` fotogramas;
+6. iniciar la demostración y observar ocupación y eventos;
+7. detenerla al finalizar para cerrar correctamente la fuente.
+
+## Ejecutar la fase 6: pruebas y entrega
+
+Ejecutar todas las pruebas:
+
+```powershell
+python -m pytest -q
+```
+
+Medir el rendimiento sobre un video conocido:
+
+```powershell
+python benchmark.py resources/people-walking.mp4 --frames 300 --imgsz 640 --device cpu
+```
+
+Comparar resoluciones sin cambiar el código:
+
+```powershell
+python benchmark.py resources/people-walking.mp4 --frames 300 --imgsz 512 --device cpu
+python benchmark.py resources/people-walking.mp4 --frames 300 --imgsz 416 --device cpu
+python benchmark.py resources/people-walking.mp4 --frames 300 --imgsz 320 --device cpu
+```
+
+Consultar dispositivos reconocidos:
+
+```powershell
+python main.py --device-status
+```
+
+### Rendimiento y aceleracion AMD
+
+El entorno actual usa `torch 2.15.0+cpu` y confirma que CUDA no está disponible.
+Por lo tanto, el bajo FPS observado con el modelo y el seguimiento activos se debe
+principalmente a ejecución mediante CPU, además del trabajo adicional de Streamlit,
+dibujo de trayectorias y actualizaciones de SQLite.
+
+La GPU AMD no puede acelerarse mediante CUDA, porque CUDA pertenece al ecosistema
+NVIDIA. Tampoco conviene instalar paquetes CUDA o cambiar versiones en la fase final
+si todavía no están probados.
+
+Opciones compatibles a evaluar con AMD:
+
+- **OpenVINO:** alternativa principal para muchos equipos Intel/AMD. Puede acelerar
+  inferencia por CPU, GPU integrada o aceleradores compatibles.
+- **DirectML:** alternativa para AMD mediante Windows. Requiere una instalación
+  separada de `torch-directml` y normalmente Python 3.11 o 3.12.
+- **ROCm:** opción Linux principalmente; el soporte directo en Windows puede ser
+  limitado según modelo y distribución.
+
+Para no romper el entorno actual se recomienda ignorar DirectML temporalmente.
+El entorno ya contiene opciones `dml` y `openvino`, pero muestran una validación
+clara si los paquetes o la GPU no están disponibles.
+
+Instalación opcional de OpenVINO:
+
+```powershell
+python -m pip install openvino
+```
+
+La aceleración AMD debe medirse con benchmark antes de declararla estable. Si
+OpenVINO no mejora la velocidad, se mantiene CPU como modo reproducible.
+
+### Conceptos de fase 6
+
+- Benchmark y baseline.
+- FPS, throughput y latencia.
+- Latencia media y percentil p95.
+- Resolución de inferencia y trade-off precisión-rendimiento.
+- CPU-bound y GPU-bound.
+- Pipeline bottleneck.
+- Warm-up y caché JIT.
+- Batch size y inferencia por fotograma.
+- Frame skipping y procesamiento asincrónico.
+- Profiling de CPU y GPU.
+- Reproducibilidad de pruebas.
+- Evidencia académica con video conocido.
 
 La primera ejecucion descarga `yolo11n.pt` automaticamente. El archivo de pesos
 se excluye del control de versiones por `.gitignore`.
