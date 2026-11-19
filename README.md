@@ -4,7 +4,8 @@ Proyecto academico de inteligencia artificial para detectar personas en video o
 camara web, seguirlas a lo largo de los fotogramas y contar entradas y salidas.
 
 Este repositorio esta preparado para desarrollar el proyecto por fases. La fase 1
-corresponde a la deteccion base de personas mediante una CNN.
+corresponde a la deteccion base de personas mediante una CNN y la fase 2 integra
+seguimiento temporal.
 
 ## Estado actual
 
@@ -12,7 +13,8 @@ corresponde a la deteccion base de personas mediante una CNN.
 - Estructura inicial creada para deteccion, seguimiento, conteo, almacenamiento,
   analisis y visualizacion.
 - Dependencias principales instaladas.
-- Pendiente la implementacion del modulo de deteccion y su demostracion.
+- Deteccion funcional mediante YOLO.
+- Seguimiento integrado mediante ByteTrack o BoT-SORT.
 
 ## Tecnologias seleccionadas
 
@@ -142,7 +144,82 @@ Un detector no garantiza exactitud perfecta. Puede fallar ante:
 - fondos visualmente complejos;
 - cambios de resolucion o angulo.
 
-El seguimiento, aun no implementado, se verá afectado por estas limitaciones.
+El seguimiento puede verse afectado por estas limitaciones, especialmente por
+oclusiones, cambios de identidad y trayectorias fragmentadas.
+
+## Conceptos técnicos para estudiar
+
+Estos nombres forman el vocabulario necesario para explicar y evaluar el sistema.
+Las explicaciones se mantienen breves; cada concepto puede estudiarse de forma
+individual en documentación académica o técnica.
+
+### Fase 1: detección
+
+- Tensor, tensor multidimensional y batch.
+- Convolución, kernel, stride, padding y receptive field.
+- Feature maps y extracción jerárquica de características.
+- Mecanismos de activación: ReLU y funciones de activación.
+- Pooling y preservacion espacial.
+- Backpropagation y descenso de gradiente.
+- Transfer learning y fine-tuning.
+- Arquitectura CNN y capa backbone.
+- Neck o capas de fusion multiescala.
+- Detection head o cabeza de detección.
+- Anchor-free detection.
+- IoU, Intersection over Union.
+- NMS y threshold de confianza.
+- Class y objectness score.
+- One-stage detector y YOLO.
+- COCO dataset y taxonomía de clases.
+- Entrenamiento, validación, inferencia y generalización.
+- Overfitting y underfitting.
+- Precision, recall, F1-score y mean Average Precision.
+- Matriz de confusión y curvas Precision-Recall.
+- Resolución de entrada, batch size y latencia.
+
+### Fase 2: seguimiento
+
+- Multi-object tracking o MOT.
+- Object tracking y data association.
+- Track ID y identidad temporal.
+- Detection-to-track association.
+- Bounding box, estado cinemático y punto de observación.
+- IoU matching.
+- Re-identification o Re-ID.
+- Motion model y Kalman filter.
+- Predicción y actualización de estado.
+- Filter gain, incertidumbre y matriz de covarianza.
+- Hungarian algorithm.
+- Greedy matching.
+- Cost matrix o matriz de costes.
+- Similarity score y apareamiento global.
+- Track lifecycle: nuevo, activo, perdido y eliminado.
+- Track confirmation y unconfirmed track.
+- Tracklet.
+- Occlusion handling.
+- Identity switch.
+- Fragmentation de trayectoria.
+- ByteTrack y sus detecciones de baja y alta confianza.
+- BoT-SORT y asociación basada en movimiento y apariencia.
+- State estimation con filtro de Kalman.
+- Persistent tracking.
+- Batch temporal y consistencia entre fotogramas.
+- FPS, frame-to-frame latency y throughput.
+- HOTA, MOTA, IDF1 y CLEAR MOT.
+- Multi-object tracking accuracy y fragmentos de identidad.
+
+### Conceptos adicionales según el avance
+
+- Geometría de líneas y coordenadas normalizadas.
+- Interpolación y detección de cruces.
+- State machine o máquina de estados.
+- Persistencia con SQLite y consultas SQL.
+- Series temporales y agregaciones.
+- Rule-based system y procesamiento de lenguaje natural básico.
+- API, interfaz CLI y arquitectura por módulos.
+- Pruebas unitarias, integración y evaluación funcional.
+- Reproducibilidad y fijado de versiones.
+- Privacidad desde el diseño y minimización de datos.
 
 ## Arquitectura actual
 
@@ -240,10 +317,45 @@ Opciones disponibles:
 
 ```text
 --model yolo11n.pt   Modelo YOLO preentrenado
---conf 0.40          Umbral de confianza
+--conf 0.35          Umbral de confianza
 --device cpu         Dispositivo de inferencia
 --source 0           Indice explicito de la webcam
+--track              Activa el seguimiento integrado
+--tracker            tracking/bytetrack_stable.yaml o tracking/botsort_stable.yaml
+--trajectory 30      Numero maximo de puntos por trayectoria
 ```
+
+## Ejecutar la fase 2: seguimiento
+
+Con ByteTrack:
+
+```powershell
+python main.py --source data/videos/prueba.mp4 --track --tracker tracking/bytetrack_stable.yaml
+```
+
+Con BoT-SORT:
+
+```powershell
+python main.py --track --tracker tracking/botsort_stable.yaml
+```
+
+La segunda opcion utiliza la webcam. Cada persona mostrada conserva un `ID` temporal
+entre fotogramas y tambien se dibuja su trayectoria reciente. El identificador no
+representa una identidad personal y puede reiniciarse al cambiar de video, camara
+o reiniciar el programa.
+
+Configuracion conservadora aplicada:
+
+- umbral predeterminado elevado a `0.35`;
+- las pistas deben confirmar una detección antes de recibir nuevo ID;
+- asociaciones conservan hasta `90` fotogramas;
+- se eliminan cuadros con solapamiento IoU mayor a `0.50`;
+- el código ya no reasigna IDs mediante heurísticas propias;
+- el número mostrado corresponde al ID entregado por ByteTrack o BoT-SORT;
+- si una persona desaparece, desaparece el cuadro hasta que reaparezca.
+
+No se recomienda usar `--conf` menor a `0.30` en escenas públicas. Un umbral
+demasiado bajo introduce detecciones parciales y frecuentemente genera IDs falsos.
 
 La primera ejecucion descarga `yolo11n.pt` automaticamente. El archivo de pesos
 se excluye del control de versiones por `.gitignore`.

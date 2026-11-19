@@ -5,7 +5,9 @@ from pathlib import Path
 import cv2
 
 from detection.person_detector import PersonDetector
+from tracking.person_tracker import PersonTracker
 from visualization.renderer import draw_person_detections
+from visualization.tracking_renderer import draw_tracks
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,13 +27,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--conf",
         type=float,
-        default=0.40,
+        default=0.35,
         help="Umbral de confianza entre 0 y 1.",
     )
     parser.add_argument(
         "--device",
         default="cpu",
         help="Dispositivo de inferencia: cpu o cuda.",
+    )
+    parser.add_argument(
+        "--track",
+        action="store_true",
+        help="Activar seguimiento mediante tracking integrado.",
+    )
+    parser.add_argument(
+        "--tracker",
+        default="tracking/bytetrack_stable.yaml",
+        choices=("tracking/bytetrack_stable.yaml", "tracking/botsort_stable.yaml"),
+        help="Algoritmo de seguimiento.",
+    )
+    parser.add_argument(
+        "--trajectory",
+        type=int,
+        default=30,
+        help="Cantidad maxima de puntos mostrados por trayectoria.",
     )
     parser.add_argument(
         "--output",
@@ -78,7 +97,11 @@ def process_image(
     return True
 
 
-def process_video(detector: PersonDetector, source: str | int) -> bool:
+def process_video(
+    detector: PersonDetector,
+    source: str | int,
+    tracker: PersonTracker | None = None,
+) -> bool:
     capture = cv2.VideoCapture(source)
     if not capture.isOpened():
         print(f"No se pudo abrir la fuente: {source}", file=sys.stderr)
@@ -92,8 +115,12 @@ def process_video(detector: PersonDetector, source: str | int) -> bool:
             if not success:
                 break
 
-            detections = detector.detect(frame)
-            rendered = draw_person_detections(frame, detections)
+            if tracker is None:
+                detections = detector.detect(frame)
+                rendered = draw_person_detections(frame, detections)
+            else:
+                tracks = tracker.update(frame)
+                rendered = draw_tracks(frame, tracks, tracker)
             cv2.imshow(window_name, rendered)
 
             key = cv2.waitKey(1) & 0xFF
@@ -129,7 +156,21 @@ def main() -> int:
     if source_suffix in {".jpg", ".jpeg", ".png", ".bmp", ".webp"}:
         return 0 if process_image(detector, str(source), args.output) else 4
 
-    return 0 if process_video(detector, source) else 5
+    active_tracker: PersonTracker | None = None
+    if args.track:
+        try:
+            active_tracker = PersonTracker(
+                model_name=args.model,
+                confidence=args.conf,
+                device=args.device,
+                tracker=args.tracker,
+                trajectory_length=args.trajectory,
+            )
+        except (ImportError, ValueError, RuntimeError) as error:
+            print(f"No se pudo iniciar el seguimiento: {error}", file=sys.stderr)
+            return 6
+
+    return 0 if process_video(detector, source, active_tracker) else 5
 
 
 if __name__ == "__main__":
