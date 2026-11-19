@@ -221,6 +221,24 @@ individual en documentación académica o técnica.
 - Reproducibilidad y fijado de versiones.
 - Privacidad desde el diseño y minimización de datos.
 
+### Conceptos de persistencia y estadisticas
+
+- SQLite y base de datos relacional.
+- Esquema, tabla, fila, columna y clave primaria.
+- Constraints o restricciones de integridad.
+- Índices y consultas con filtros temporales.
+- Transacción, commit y rollback.
+- SQL DML y SQL de agregación.
+- COUNT, MAX, GROUP BY y ORDER BY.
+- Series temporales e ISO 8601.
+- Zona horaria y diferencia UTC/local.
+- Sesión o batch ID.
+- Persistencia de eventos frente a persistencia de estados.
+- Exportación CSV.
+- Consultas locales sin servicios externos.
+- Asistente basado en reglas y NLP limitado.
+- Tokenización, coincidencia por palabras clave e intención.
+
 ## Arquitectura actual
 
 ```text
@@ -395,6 +413,47 @@ Opciones adicionales:
 - Double counting: registro repetido del mismo cruce.
 - Ocupación: entradas menos salidas, limitada para no ser negativa.
 - Coordenadas normalizadas: posiciones relativas al ancho y alto del fotograma.
+
+## Ejecutar la fase 4: persistencia y estadísticas
+
+Cada cruce puede guardarse automáticamente en SQLite. Por defecto la base se
+crea en `data/occupancy.sqlite3`:
+
+```powershell
+python main.py --source data/videos/prueba.mp4 --track --count --database data/occupancy.sqlite3
+```
+
+Consultar el resumen del dia:
+
+```powershell
+python main.py --stats
+```
+
+Consultar una estadistica con el asistente local:
+
+```powershell
+python main.py --ask "cuantas personas hay ahora"
+python main.py --ask "cuantas entradas hubo hoy"
+python main.py --ask "cuantas salidas hubo hoy"
+python main.py --ask "cual fue la ocupacion maxima"
+python main.py --ask "muestra el total de la ultima hora"
+```
+
+Abrir el asistente interactivo:
+
+```powershell
+python main.py --interactive
+```
+
+Exportar todos los eventos a CSV:
+
+```powershell
+python main.py --export data/resultados/eventos.csv
+```
+
+La tabla `count_events` conserva fecha ISO, identificador temporal del track,
+tipo de evento y ocupacion resultante. La base SQLite y el directorio `data/`
+se excluyen del control de versiones.
 
 La primera ejecucion descarga `yolo11n.pt` automaticamente. El archivo de pesos
 se excluye del control de versiones por `.gitignore`.

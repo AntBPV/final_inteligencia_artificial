@@ -1,11 +1,15 @@
 import argparse
 import sys
+import uuid
 from pathlib import Path
 
 import cv2
 
 from detection.person_detector import PersonDetector
 from counting.line_counter import LineCounter
+from analytics.assistant import OccupancyAssistant
+from analytics.statistics import OccupancyStatistics
+from storage.repository import CountRepository
 from tracking.person_tracker import PersonTracker
 from visualization.renderer import draw_person_detections
 from visualization.tracking_renderer import draw_tracks
@@ -85,6 +89,16 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Ruta opcional para guardar una imagen procesada.",
     )
+    parser.add_argument(
+        "--database",
+        type=Path,
+        default=Path("data/occupancy.sqlite3"),
+        help="Ruta de la base SQLite.",
+    )
+    parser.add_argument("--ask", help="Consultar una estadistica y finalizar.")
+    parser.add_argument("--stats", action="store_true", help="Mostrar resumen hoy.")
+    parser.add_argument("--interactive", action="store_true", help="Abrir asistente interactivo.")
+    parser.add_argument("--export", type=Path, help="Exportar eventos a CSV.")
     return parser.parse_args()
 
 
@@ -134,6 +148,8 @@ def process_video(
     reverse_direction: bool = False,
     confirmation_frames: int = 3,
     line_margin_pixels: float = 8.0,
+    repository: CountRepository | None = None,
+    session_id: str | None = None,
 ) -> bool:
     capture = cv2.VideoCapture(source)
     if not capture.isOpened():
@@ -176,6 +192,13 @@ def process_video(
                     label = f"{event.event_type.upper()} ID {event.track_id}"
                     recent_events.append(label)
                     print(label)
+                    if repository is not None:
+                        repository.save_event(
+                            session_id=session_id or "unknown",
+                            track_id=event.track_id,
+                            event_type=event.event_type,
+                            occupancy=event.occupancy,
+                        )
 
                 rendered = draw_counting_overlay(
                     rendered,
@@ -196,6 +219,44 @@ def process_video(
 
 def main() -> int:
     args = parse_args()
+
+    repository = CountRepository(args.database)
+    statistics = OccupancyStatistics(repository.connection)
+    assistant = OccupancyAssistant(statistics)
+
+    if args.ask:
+        print(assistant.ask(args.ask))
+        repository.close()
+        return 0
+
+    if args.stats:
+        summary = statistics.summarize_today()
+        print(
+            f"Hoy: {summary['entradas']} entradas, {summary['salidas']} salidas, "
+            f"{summary['ocupacion']} personas actualmente, "
+            f"{summary['ocupacion_maxima']} ocupacion maxima."
+        )
+        repository.close()
+        return 0
+
+    if args.export:
+        exported = repository.export_csv(args.export)
+        print(f"Se exportaron {exported} eventos a {args.export}")
+        repository.close()
+        return 0
+
+    if args.interactive:
+        print("Asistente de ocupacion. Escribe 'salir' para finalizar.")
+        while True:
+            try:
+                question = input("Consulta: ").strip()
+            except EOFError:
+                break
+            if question.lower() in {"salir", "exit", "q"}:
+                break
+            print(assistant.ask(question))
+        repository.close()
+        return 0
 
     try:
         source = resolve_source(args.source)
@@ -241,7 +302,8 @@ def main() -> int:
         args.line_x2,
         args.line_y2,
     )
-    return 0 if process_video(
+    session_id = uuid.uuid4().hex
+    success = process_video(
         detector,
         source,
         active_tracker,
@@ -250,7 +312,11 @@ def main() -> int:
         args.reverse_direction,
         args.confirmation,
         args.line_margin,
-    ) else 5
+        repository,
+        session_id,
+    )
+    repository.close()
+    return 0 if success else 5
 
 
 if __name__ == "__main__":
