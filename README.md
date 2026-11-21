@@ -29,6 +29,99 @@ seguimiento temporal.
 | Streamlit | Permitira crear posteriormente una interfaz grafica de demostracion. |
 | pytest | Permitira verificar con pruebas automatizadas las reglas de deteccion y conteo. |
 
+## Metodologia aplicada
+
+Este proyecto utiliza una metodología aplicada, experimental e incremental para
+visión por computador. No emplea Scrum, Kanban u otro marco ágil formal. Las fases
+funcionan como una secuencia académica de construcción y validación.
+
+El flujo metodológico es:
+
+```text
+definir el problema
+  -> seleccionar el modelo YOLO preentrenado
+  -> ejecutar detección por fotograma
+  -> asociar detecciones a track IDs
+  -> detectar cruces de una línea virtual
+  -> persistir eventos en SQLite
+  -> clasificar consultas con un transformer
+  -> consultar datos reales y retroalimentar al usuario
+  -> probar y medir rendimiento
+```
+
+### Modelo de inteligencia artificial
+
+El proyecto combina dos componentes de aprendizaje profundo:
+
+- **YOLO**, una CNN preentrenada utilizada para detección de personas.
+- **TransformerEncoder de PyTorch**, utilizado para clasificar la intención del
+  asistente y aportar retroalimentación sobre la consulta.
+
+No se entrenan redes desde cero ni se realiza reconocimiento facial. El YOLO
+proporciona detecciones visuales y el transformer interpreta expresiones en español
+para decidir qué dato estadístico debe consultar.
+
+### Transferencia de aprendizaje
+
+YOLO utiliza pesos preentrenados sobre un conjunto general de objetos. Por tanto,
+el proyecto aplica **transfer learning** sin ajustar los pesos a un dataset propio.
+Esto permite el reconocimiento inmediato de personas y reduce el costo de
+recolección y etiquetado.
+
+El transformer del asistente se entrena localmente con frases sintéticas de ejemplo.
+Su salida no contiene resultados numéricos: solamente identifica una intención.
+Los valores se obtienen de SQLite para evitar alucinaciones estadísticas.
+
+### Inferencia y seguimiento
+
+Cada fotograma pasa por:
+
+1. ejecución de YOLO;
+2. filtrado de la clase `person`;
+3. filtrado por confianza;
+4. asociación temporal con ByteTrack o BoT-SORT;
+5. asignación de un track ID temporal;
+6. dibujo de cuadros y trayectorias.
+
+El ID no representa una identidad real. Puede cambiar si el tracker pierde o
+confunde una pista debido a oclusión, movimiento, iluminación o solapamiento.
+
+### Conteo y persistencia
+
+Se calcula el lado de una persona respecto de una línea virtual. Cuando el punto
+central cambia de lado durante varios fotogramas consecutivos, se registra entrada
+o salida. La ocupación se obtiene como entradas menos salidas, limitada a cero.
+
+Los eventos se conservan en SQLite con fecha, ID temporal, tipo de evento y
+ocupación resultante.
+
+### Asistente con transformer
+
+La arquitectura del asistente es:
+
+```text
+Consulta
+  -> TransformerEncoder
+  -> intención + confianza
+  -> consulta SQL controlada
+  -> resultado de SQLite
+  -> respuesta y retroalimentación
+```
+
+Las intenciones incluyen ocupación actual, entradas hoy, salidas hoy, ocupación
+máxima, última hora y resumen diario. Si la confianza es baja, el sistema solicita
+reformular la consulta en lugar de generar una respuesta insegura.
+
+### Evaluación
+
+Se evaluaron por separado detección, seguimiento, conteo, persistencia, interfaz,
+dispositivo de ejecución y respuesta del asistente. Las pruebas incluyen casos
+deterministas de cruces, ocupación, exportación CSV y clasificación de intención.
+Los videos conocidos permiten observación visual de errores y seguimiento.
+
+Las métricas utilizadas incluyen FPS, latencia, precisión visual, recall observado,
+intercambio de IDs, entradas, salidas y ocupación máxima.
+
 ## Conceptos clave
 
 ### Vision por computador
@@ -236,8 +329,9 @@ individual en documentación académica o técnica.
 - Persistencia de eventos frente a persistencia de estados.
 - Exportación CSV.
 - Consultas locales sin servicios externos.
-- Asistente basado en reglas y NLP limitado.
-- Tokenización, coincidencia por palabras clave e intención.
+- Transformer aplicado a clasificación de intención.
+- Atención, embeddings de caracteres y codificación posicional.
+- Retroalimentación basada en intención y confianza.
 
 ## Arquitectura actual
 

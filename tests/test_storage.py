@@ -89,3 +89,32 @@ def test_assistant_now_query_is_not_interpreted_as_last_hour() -> None:
         assert "última hora" not in answer.lower()
         assert "personas" in answer
         repository.close()
+
+
+def test_transformer_uses_supported_intent() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Path(directory) / "assistant-transformer.sqlite3"
+        repository = CountRepository(database)
+        repository.save_event(
+            session_id="assistant-test",
+            track_id=1,
+            event_type="entrada",
+            occupancy=1,
+        )
+        assistant = OccupancyAssistant(
+            OccupancyStatistics(repository.connection)
+        )
+
+        answer = assistant.ask("dime cuantos visitantes entraron hoy")
+
+        assert assistant.last_intent is not None
+        assert assistant.last_intent.intent in {
+            "occupancy_now",
+            "entries_today",
+            "exits_today",
+            "maximum_occupancy",
+            "last_hour",
+            "daily_summary",
+        }
+        assert "Retroalimentacion:" in answer
+        repository.close()
